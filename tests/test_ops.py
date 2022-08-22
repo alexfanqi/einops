@@ -83,7 +83,7 @@ def check_op_against_numpy(backend, numpy_input, pattern, axes_lengths, reductio
     numpy_result = operation(numpy_input)
     check_equal = numpy.array_equal
     p_none_dimension = 0.5
-    if 'mxnet' in backend.framework_name:
+    if 'mxnet' in backend.framework_name or 'jittor' in backend.framework_name:
         # known bug in mxnet: it can't work with scalars - so use allclose instead
         check_equal = numpy.allclose
         # mxnet can't work unless shape is completely specified
@@ -352,8 +352,11 @@ def test_enumerating_directions():
     for backend in imp_op_backends:
         print('testing directions for', backend.framework_name)
         for shape in [[], [1], [1, 1, 1], [2, 3, 5, 7]]:
-            if backend.framework_name == 'mxnet.ndarray' and len(shape) == 0:
+            if (backend.framework_name == 'mxnet.ndarray'\
+                or backend.framework_name == 'jittor')\
+                and len(shape) == 0:
                 # known bug of mxnet
+                # jittor stores scalar in 1d array
                 continue
             x = numpy.arange(numpy.prod(shape)).reshape(shape)
             axes1 = _enumerate_directions(x)
@@ -371,8 +374,11 @@ def test_concatenations_and_stacking():
         for n_arrays in [1, 2, 5]:
             shapes = [[], [1], [1, 1], [2, 3, 5, 7], [1] * 6]
             for shape in shapes:
-                if backend.framework_name == 'mxnet.ndarray' and len(shape) == 0:
+                if (backend.framework_name == 'mxnet.ndarray'\
+                    or backend.framework_name == 'jittor')\
+                    and len(shape) == 0:
                     # known bug of mxnet
+                    # jittor stores scalar in 1d array
                     continue
                 arrays1 = [numpy.arange(i, i + numpy.prod(shape)).reshape(shape) for i in range(n_arrays)]
                 arrays2 = [backend.from_numpy(array) for array in arrays1]
@@ -394,7 +400,7 @@ def test_gradients_imperatives():
         results = {}
         for backend in imp_op_backends:
             y0 = backend.from_numpy(x)
-            if not hasattr(y0, 'grad'):
+            if not 'jittor' in backend.framework_name and not hasattr(y0, 'grad'):
                 continue
             if 'mxnet' in backend.framework_name:
                 backend.mx.autograd.set_recording(True)
@@ -404,9 +410,12 @@ def test_gradients_imperatives():
             y4 = reduce(y3, '... -> ', reduction=reduction)
             if 'mxnet' in backend.framework_name:
                 backend.mx.autograd.set_recording(False)
-            y4.backward()
-            grad = backend.to_numpy(y0.grad)
-            results[backend.framework_name] = grad
+            if 'jittor' in backend.framework_name:
+                grad = backend.jittor.grad(y4, y0)
+            else:
+                y4.backward()
+                grad = y0.grad
+            results[backend.framework_name] = backend.to_numpy(grad)
 
         print('comparing gradients for', results.keys())
         for name1, grad1 in results.items():

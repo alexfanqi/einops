@@ -33,6 +33,7 @@ def collect_test_backends(symbolic=False, layers=False):
                 _backends.NumpyBackend,
                 _backends.JaxBackend,
                 _backends.TorchBackend,
+                _backends.JittorBackend,
                 _backends.GluonBackend,
                 _backends.ChainerBackend,
                 _backends.TensorflowBackend,
@@ -43,6 +44,7 @@ def collect_test_backends(symbolic=False, layers=False):
         else:
             backend_types = [
                 _backends.TorchBackend,
+                _backends.JittorBackend,
                 _backends.GluonBackend,
                 _backends.ChainerBackend,
                 _backends.OneFlowBackend,

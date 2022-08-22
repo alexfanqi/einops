@@ -166,7 +166,7 @@ test_functional_cases = [
 
 def test_layer():
     for backend in collect_test_backends(layers=True, symbolic=False):
-        if backend.framework_name in ['tensorflow', 'torch', 'chainer', 'oneflow']:
+        if backend.framework_name in ['tensorflow', 'torch', 'jittor', 'chainer', 'oneflow']:
             layer_type = backend.layers().EinMix
             for args, in_shape, out_shape in test_layer_cases:
                 layer = args(layer_type)
@@ -178,7 +178,7 @@ def test_layer():
                 assert output.shape == out_shape
 
 
-valid_backends_functional = ['tensorflow', 'torch', 'jax', 'numpy',
+valid_backends_functional = ['tensorflow', 'torch', 'jittor', 'jax', 'numpy',
                              'chainer', 'oneflow', 'cupy', 'tensorflow.keras']
 
 def test_functional():

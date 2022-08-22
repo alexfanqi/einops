@@ -56,8 +56,13 @@ def test_rearrange_imperative():
                 variable = backend.from_numpy(x)
                 result = just_sum(layer(variable))
 
-            result.backward()
-            assert numpy.allclose(backend.to_numpy(variable.grad), 1)
+            if 'jittor' in backend.framework_name:
+                grad = backend.jittor.grad(result, variable)
+            else:
+                result.backward()
+                grad = variable.grad
+
+            assert numpy.allclose(backend.to_numpy(grad), 1)
 
 
 def test_rearrange_symbolic():
@@ -139,8 +144,11 @@ def test_reduce_imperative():
                     variable = backend.from_numpy(x)
                     result = just_sum(layer(variable))
 
-                result.backward()
-                grad = backend.to_numpy(variable.grad)
+                if 'jittor' in backend.framework_name:
+                    grad = backend.jittor.grad(result, variable)
+                else:
+                    result.backward()
+                    grad = backend.to_numpy(variable.grad)
                 if reduction == 'sum':
                     assert numpy.allclose(grad, 1)
                 if reduction == 'mean':
@@ -229,6 +237,43 @@ def test_torch_layers_scripting():
         input = torch.randn([10, 3, 32, 32])
 
         torch.testing.assert_allclose(model1(input), model2(input), atol=1e-3, rtol=1e-3)
+
+
+def create_jittor_model(use_reduce=False):
+    from jittor.nn import Sequential, Conv2d, MaxPool2d, Linear, ReLU
+    from einops.layers.jittor import Rearrange, Reduce, EinMix
+    return Sequential(
+        Conv2d(3, 6, kernel_size=(5, 5)),
+        Reduce('b c (h h2) (w w2) -> b c h w', 'max', h2=2, w2=2) if use_reduce else MaxPool2d(kernel_size=2),
+        Conv2d(6, 16, kernel_size=(5, 5)),
+        Reduce('b c (h h2) (w w2) -> b c h w', 'max', h2=2, w2=2),
+        Rearrange('b c h w -> b (c h w)'),
+        Linear(16 * 5 * 5, 120),
+        ReLU(),
+        Linear(120, 84),
+        ReLU(),
+        EinMix('b c1 -> (b c2)', weight_shape='c1 c2', bias_shape='c2', c1=84, c2=84),
+        EinMix('(b c2) -> b c3', weight_shape='c2 c3', bias_shape='c3', c2=84, c3=84),
+        Linear(84, 10),
+    )
+
+
+def test_jittor_layer():
+    has_jittor = any(backend.framework_name == 'jittor' for backend in collect_test_backends(symbolic=False, layers=True))
+    if has_jittor:
+        # checked that jittor present
+        import jittor
+
+        rtol=1e-05
+        atol=1e-08
+        allclose=lambda input, other: jittor.all(jittor.abs(input-other) <= atol+rtol*jittor.abs(other))
+        model1 = create_jittor_model(use_reduce=True)
+        model2 = create_jittor_model(use_reduce=False)
+        input = jittor.randn([10, 3, 32, 32])
+        # random models have different predictions
+        assert not allclose(model1(input), model2(input))
+        model2.load_state_dict(pickle.loads(pickle.dumps(model1.state_dict())))
+        assert allclose(model1(input), model2(input))
 
 
 def test_keras_layer():
