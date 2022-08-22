@@ -362,6 +362,67 @@ class TorchBackend(AbstractBackend):
     def einsum(self, pattern, *x):
         return self.torch.einsum(pattern, *x)
 
+class JittorBackend(TorchBackend):
+    framework_name = 'jittor'
+
+    def __init__(self):
+        import jittor
+        self.jittor = jittor
+
+    def is_appropriate_type(self, tensor):
+        return isinstance(tensor, self.jittor.Var)
+
+    def from_numpy(self, x):
+        return self.jittor.Var(x)
+
+    def to_numpy(self, x):
+        return x.numpy()
+
+    def arange(self, start, stop):
+        return self.jittor.arange(start, stop, dtype=self.jittor.int64)
+
+    def shape(self, x):
+        # x.shape has type jittor_core.NanoVector and is non-hashable
+        return tuple(x.shape)
+
+    def reshape(self, x, shape):
+        if len(shape) == 0:
+            return x
+        return self.jittor.reshape(x, shape)
+
+    def reduce(self, x, operation, reduced_axes):
+        for axis in sorted(reduced_axes, reverse=True):
+            x = getattr(x, operation)(dim=axis)
+        return x
+
+    def transpose(self, x, axes):
+        return x.transpose(axes)
+
+    def stack_on_zeroth_dimension(self, tensors: list):
+        return self.jittor.stack(tensors)
+
+    def add_axes(self, x, n_axes, pos2len):
+        repeats = [-1] * n_axes
+        for axis_position, axis_length in pos2len.items():
+            x = self.add_axis(x, axis_position)
+            repeats[axis_position] = axis_length
+        return x.expand(repeats)
+
+    def tile(self, x, repeats):
+        return x.repeat(repeats)
+
+    def add_axis(self, x, new_position):
+        return self.jittor.unsqueeze(x, new_position)
+
+    def is_float_type(self, x):
+        return x.dtype in [self.jittor.float16, self.jittor.float32, self.jittor.float64]
+
+    def layers(self):
+        from .layers import jittor
+        return jittor
+
+    def einsum(self, pattern, *x):
+        return self.jittor.linalg.einsum(pattern, *x)
 
 class CupyBackend(AbstractBackend):
     framework_name = 'cupy'
